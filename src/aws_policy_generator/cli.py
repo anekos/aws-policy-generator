@@ -106,18 +106,12 @@ def variables_embeder(region: Optional[str], account_id: Optional[str]) -> Calla
         def rep(source: str, key: str, value: Optional[str]) -> str:
             if value is None:
                 return source
-            source = source.replace(f'<{key}>', value)
-            source = source.replace(f'{{{key}}}', value)
+            source = re.sub(f'<{key}>', value, source, flags=re.IGNORECASE)
+            source = re.sub(rf'\{{{key}\}}', value, source, flags=re.IGNORECASE)
             return source
 
         fmt = rep(fmt, 'region', region)
-        fmt = rep(fmt, 'Account', region)
-        fmt = rep(fmt, 'AccountId', region)
-        fmt = rep(fmt, 'account', region)
-        fmt = rep(fmt, 'accountId', region)
-        fmt = rep(fmt, 'account_id', region)
-        fmt = rep(fmt, 'account_ID', region)
-        fmt = rep(fmt, 'account_Id', region)
+        fmt = rep(fmt, 'account[-_]?id', account_id)
 
         return fmt
     return embed_variables
