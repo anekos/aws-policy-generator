@@ -12,6 +12,7 @@ dataclasses-json = "^0.5.5"
 fire = "^0.4.0"
 pyfzf = "^0.2.2"
 requests = "^2.26.0"
+appdirs = "^1.4.4"
 
 [tool.poetry.dev-dependencies]
 

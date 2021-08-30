@@ -8,6 +8,7 @@ import os
 import re
 import sys
 
+from appdirs import user_data_dir
 from dataclasses_json import config, DataClassJsonMixin, LetterCase
 from pyfzf.pyfzf import FzfPrompt
 import boto3
@@ -127,7 +128,9 @@ def policy_writer(embeder: Callable[[str], str]) -> Callable[[Service, List[str]
 
 def main() -> None:
     url = 'https://awspolicygen.s3.amazonaws.com/js/policies.js'
-    cache = '/tmp/aws-policies.js'
+    data_dir = user_data_dir('aws-policy-generator', 'anekos')
+    os.makedirs(data_dir, exist_ok=True)
+    cache = os.path.join(data_dir, 'aws-policies.js')
 
     region: Optional[str] = os.environ.get('AWS_DEFAULT_REGION') or os.environ.get('AWS_REGION')
 
