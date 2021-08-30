@@ -3,14 +3,13 @@
 
 from dataclasses import dataclass, field
 from io import StringIO
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 import os
 import re
 
 from appdirs import user_data_dir
 from dataclasses_json import config, DataClassJsonMixin, LetterCase
 from pyfzf.pyfzf import FzfPrompt
-import boto3
 import plumbum
 import requests
 
@@ -101,20 +100,22 @@ def input_actions(service: Service) -> Optional[List[str]]:
     return actions
 
 
-def variables_embeder(region: Optional[str], account_id: Optional[str]) -> Callable[[str], str]:
-    def embed_variables(fmt: str) -> str:
-        def rep(source: str, key: str, value: Optional[str]) -> str:
-            if value is None:
-                return source
-            source = re.sub(f'<{key}>', value, source, flags=re.IGNORECASE)
-            source = re.sub(rf'\{{{key}\}}', value, source, flags=re.IGNORECASE)
+def embed_variables(fmt: str) -> str:
+    def rep(source: str, key: str, value: str) -> str:
+        if value is None:
             return source
+        source = re.sub(f'<{key}>', value, source, flags=re.IGNORECASE)
+        source = re.sub(rf'\$?\{{{key}\}}', value, source, flags=re.IGNORECASE)
+        return source
 
-        fmt = rep(fmt, 'region', region)
-        fmt = rep(fmt, 'account[-_]?id', account_id)
+    s = fmt
+    s = rep(s, 'region', '${AWS::Region}')
+    s = rep(s, 'account[-_]?id', '${AWS::AccountId}')
 
-        return fmt
-    return embed_variables
+    if s == fmt:
+        return f"""'{s}'"""
+
+    return f"""!Sub '{s}'"""
 
 
 def write_policy_header(file: StringIO) -> None:
@@ -123,18 +124,16 @@ def write_policy_header(file: StringIO) -> None:
     print('      Statement:', file=file)
 
 
-def policy_writer(embeder: Callable[[str], str]) -> Callable[[Service, List[str], StringIO], None]:
-    def write_policy(service: Service, actions: List[str], file: StringIO) -> None:
-        print('        - Effect: Allow', file=file)
-        if service.arn_format is not None:
-            arn = embeder(service.arn_format)
-        else:
-            arn = '*'
-        print(f"          Resource: '{arn}'", file=file)
-        print('          Action:', file=file)
-        for action in actions:
-            print(f'            - {service.string_prefix}:{action}', file=file)
-    return write_policy
+def write_policy(service: Service, actions: List[str], file: StringIO) -> None:
+    print('        - Effect: Allow', file=file)
+    if service.arn_format is not None:
+        arn = embed_variables(service.arn_format)
+    else:
+        arn = "'*'"
+    print(f"          Resource: {arn}", file=file)
+    print('          Action:', file=file)
+    for action in actions:
+        print(f'            - {service.string_prefix}:{action}', file=file)
 
 
 def main() -> None:
@@ -142,18 +141,6 @@ def main() -> None:
     data_dir = user_data_dir('aws-policy-generator', 'anekos')
     os.makedirs(data_dir, exist_ok=True)
     cache = os.path.join(data_dir, 'aws-policies.js')
-
-    region: Optional[str] = os.environ.get('AWS_DEFAULT_REGION') or os.environ.get('AWS_REGION')
-
-    account_id: Optional[str]
-    try:
-        sts_client = boto3.client('sts')
-        account_id = sts_client.get_caller_identity()['Account']
-    except Exception:
-        account_id = None
-
-    embeder = variables_embeder(region, account_id)
-    write_policy = policy_writer(embeder)
 
     buffer = StringIO()
 

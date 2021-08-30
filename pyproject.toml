@@ -7,7 +7,6 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-boto3 = "^1.18.31"
 dataclasses-json = "^0.5.5"
 pyfzf = "^0.2.2"
 requests = "^2.26.0"
