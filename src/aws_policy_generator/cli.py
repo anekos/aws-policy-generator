@@ -6,12 +6,12 @@ from io import StringIO
 from typing import Callable, Dict, Iterable, List, Optional
 import os
 import re
-import sys
 
 from appdirs import user_data_dir
 from dataclasses_json import config, DataClassJsonMixin, LetterCase
 from pyfzf.pyfzf import FzfPrompt
 import boto3
+import plumbum
 import requests
 
 
@@ -36,9 +36,12 @@ class Policies(DataClassJsonMixin):
     service_map: Dict[str, Service]
 
 
-def select_menu(candidates: Iterable[str], prompt: str) -> Optional[List[str]]:
+def select_menu(candidates: Iterable[str], prompt: str, multi: bool) -> Optional[List[str]]:
     fzf = FzfPrompt()
-    result = fzf.prompt(candidates, f'--multi --cycle --reverse --prompt "{prompt}: "')
+    opts = ''
+    if multi:
+        opts = '--multi'
+    result = fzf.prompt(candidates, f'{opts} --cycle --reverse --prompt "{prompt}: "')
     if result == []:
         return None
     return result
@@ -72,10 +75,14 @@ def load_policies(url: str, cache: str) -> Policies:
         return Policies.from_json(json_text)
 
 
-def input_services(policies: Policies) -> Optional[List[Service]]:
-    services = map(lambda kv: f'{kv[0]} [{kv[1].string_prefix}]', policies.service_map.items())
-    service_names = select_menu(candidates=services, prompt='Service')
+def input_service(policies: Policies, insert_end: bool) -> Optional[Service]:
+    services = list(map(lambda kv: f'{kv[0]} [{kv[1].string_prefix}]', policies.service_map.items()))
+    if insert_end:
+        services.insert(0, 'end')
+    service_names = select_menu(candidates=services, prompt='Service', multi=False)
     if service_names is None:
+        return None
+    if insert_end and service_names == ['end']:
         return None
     result = []
     for name in service_names:
@@ -84,11 +91,11 @@ def input_services(policies: Policies) -> Optional[List[Service]]:
             result.append(found)
     if result == []:
         return None
-    return result
+    return result[0]
 
 
 def input_actions(service: Service) -> Optional[List[str]]:
-    actions = select_menu(service.actions, prompt=f'Actions for {service.string_prefix}')
+    actions = select_menu(service.actions, prompt=f'Actions for {service.string_prefix}', multi=True)
     if actions is None:
         return None
     return actions
@@ -96,12 +103,22 @@ def input_actions(service: Service) -> Optional[List[str]]:
 
 def variables_embeder(region: Optional[str], account_id: Optional[str]) -> Callable[[str], str]:
     def embed_variables(fmt: str) -> str:
-        if region is not None:
-            fmt = fmt.replace('<region>', region)
-            fmt = fmt.replace('${Region}', region)
-        if account_id is not None:
-            fmt = fmt.replace('<account>', account_id)
-            fmt = fmt.replace('${account}', account_id)
+        def rep(source: str, key: str, value: Optional[str]) -> str:
+            if value is None:
+                return source
+            source = source.replace(f'<{key}>', value)
+            source = source.replace(f'{{{key}}}', value)
+            return source
+
+        fmt = rep(fmt, 'region', region)
+        fmt = rep(fmt, 'Account', region)
+        fmt = rep(fmt, 'AccountId', region)
+        fmt = rep(fmt, 'account', region)
+        fmt = rep(fmt, 'accountId', region)
+        fmt = rep(fmt, 'account_id', region)
+        fmt = rep(fmt, 'account_ID', region)
+        fmt = rep(fmt, 'account_Id', region)
+
         return fmt
     return embed_variables
 
@@ -149,30 +166,21 @@ def main() -> None:
     write_policy_header(buffer)
 
     policies = load_policies(url, cache)
-
-    services = input_services(policies)
-    if services is None:
-        return None
-
-    for service in services:
-        actions = input_actions(service)
-        if actions is None:
-            return None
-
-        write_policy(service, actions, buffer)
-
-    print(buffer.getvalue())
-
-
-def wrapped_main() -> None:
-    import plumbum
+    insert_end = False
 
     try:
-        main()
+        while True:
+            service = input_service(policies, insert_end=insert_end)
+            if service is None:
+                break
+
+            actions = input_actions(service)
+            if actions is None:
+                break
+
+            write_policy(service, actions, buffer)
+            insert_end = True
     except plumbum.commands.processes.ProcessExecutionError:
-        sys.exit(1)
+        pass
 
-
-if __name__ == '__main__':
-    import fire
-    fire.Fire(wrapped_main)
+    print(buffer.getvalue())
