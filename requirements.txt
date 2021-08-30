@@ -1,6 +1,5 @@
 boto3
 dataclasses_json
 fire
-mypy
 pyfzf
 requests
