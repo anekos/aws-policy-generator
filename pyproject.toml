@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "aws-policy-generator"
+version = "0.1.0"
+description = "Interactive AWS IAM Policy Generator"
+authors = ["anekos <anekos@snca.net>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+boto3 = "^1.18.31"
+dataclasses-json = "^0.5.5"
+fire = "^0.4.0"
+pyfzf = "^0.2.2"
+requests = "^2.26.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
