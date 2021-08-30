@@ -5,7 +5,9 @@
 script_path="$(readlink --canonicalize "$0")"
 dir="$(dirname "$script_path")"
 
-# shellcheck disable=1090
-source "${dir}/.env/bin/activate"
+cd "$dir" || exit 1
 
-exec python "${script_path}.py" "$@"
+# shellcheck disable=1090
+source ".env/bin/activate"
+
+poetry run aws-policy-generator
