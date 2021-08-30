@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# set -x
+
+script_path="$(readlink --canonicalize "$0")"
+dir="$(dirname "$script_path")"
+
+# shellcheck disable=1090
+source "${dir}/.env/bin/activate"
+
+exec python "${script_path}.py" "$@"
